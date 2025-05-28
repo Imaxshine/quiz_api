@@ -1,41 +1,41 @@
 <?php
-$url = "https://bongoclass.com/quiz/brain/jj.php";
-
-$ch = curl_init();
-curl_setopt($ch,CURLOPT_URL,$url);
-curl_setopt($ch,CURLOPT_RETURNTRANSFER,true);
-$responses = curl_exec($ch);
-if(curl_error($ch))
-{
-    die("cURL Error: " . curl_errno($ch));
+session_start();
+function getQuizQuestions(){
+    $url = "https://bongoclass.com/quiz/brain/jj.php";
+    $data = file_get_contents($url);
+    return json_decode($data,true);
 }
-curl_close($ch);
-
-//decode the Responses from the API 
-$data = json_decode($responses,true);
-
-if($_SERVER['REQUEST_METHOD'] === "POST")
-{
-    $user_answers = $_POST['answers'] ?? [];
+//Baada ya kutuma POST Form (Ku submit)
 
 $score = 0;
 $results = [];
 
-foreach($data['questions'] as $question){
-    $question_id = $question['id'];
-    $correct_answer = $question['answer'];
-    $user_answer = $user_answers[$question_id] ?? "";
+if($_SERVER['REQUEST_METHOD'] === "POST"){
+    $questions = $_SESSION['questions'] ?? [];
+    $user_answers = $_POST['answers'] ?? [];
 
-    $results[$question_id] = [
-        'is_correct'=>($user_answer === $correct_answer),
-        'correct_answer'=>$correct_answer,
-        'user_answer'=>$user_answer
-    ];
-    if($user_answer === $correct_answer){
-        $score++;
+    foreach($questions as $question){
+        $questionId = $question['id'];
+        $correctAnswer = $question['answer'];
+        $userAnswer = $user_answers[$questionId] ?? null;
+
+        $results[$questionId] = [
+            'is_correct'=>($userAnswer === $correctAnswer), //Hapa tunaifadhi True / False
+            'correct'=>$correctAnswer, //Jibu sahihi
+            'user_answer'=>$userAnswer
+        ];
+
+        //Angalia kama jibu ni sahihi
+        if($userAnswer === $correctAnswer)
+        {
+            $score++;
+        }
     }
-}
-
+    
+}else{
+    //Kama Method sio Post Basi ukurasa unarun kwa mara ya kwanza na default ni GET method
+    $data = getQuizQuestions();
+    $_SESSION['questions'] = $data['questions'];
 }
 ?>
 <!DOCTYPE html>
@@ -43,113 +43,96 @@ foreach($data['questions'] as $question){
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Quiz</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.6/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-4Q6Gf2aSP4eDXB8Miphtr37CMZZQ5oXLH2yaXMJ2w8e2ZtHTl7GptT4jmndRuHDT" crossorigin="anonymous">
+    <title>Chemsha bongo</title>
     <style>
-        body{
-            position: relative;
+        .correct{
+            background: #d4edda;
         }
-        .title{
-           text-align: center;
-           background-color: blueviolet;
-           color:#fff;
-           padding: 10px 10px;
-           position: fixed;
-           top: -20px;
-           left: 10px;
-           border-radius: 10px;
-           width: 100vw;
+        .incorrect{
+            background: #f8d7da;
         }
-        .container{
-            padding: 20px 35px;
-            background-color: #DDC;
+        .question{
+            transition: 1s linear;
         }
-        .questions{
-           /* background-color: #fff;
-           border: 2px solid red; */
-        }
-        .eachSection{
-            background-color: #fff;
-            padding: 0 10px;
-            height: auto;
-            border-radius: 12px;
-            box-shadow: 3px 6px 4px 3px rgba(0,0,0,0.3);
-        }
-        .eachSection p{
-            padding: 10px;
-        }
-        .btnHolder{
-            margin: 25px auto;
-        }
-        .btnHolder .btn{
-            font-family: Cambria, Cochin, Georgia, Times, 'Times New Roman', serif;
-            font-weight: bolder;
-            padding: 7px 10px;
-            border:none;
-            border-radius: 10px;
-            outline: none;
-            background-color: blue;
-            color: #fff;
-            width: 30%;
-            cursor: pointer;
-            transition: 1s ease;
-        }
-        .btnHolder .btn:hover{
-            transform: translateX(10px);
+        .question:hover{
+            transform: translateX(25px);
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h2 class="title">Maswali na majibu</h2>
+    <h2>Chemsha Bongo</h2>
 
-        <div>
-            <?php if(!empty($score)): ?>
-                <h4>Umepata alama <?php echo $score; ?> / <?php echo count($data['questions']); ?> </h4>
+    <?php if($_SERVER['REQUEST_METHOD'] === "POST"): ?>
+        <?php $num = 1; foreach($_SESSION['questions'] as $q):
+        $qid = $q['id'];
+        $res = $results[$qid];
+        $class = $res['is_correct'] ? 'correct' : 'incorrect';
+        ?>
+
+        <div class="question shadow-lg p-2 rounded <?= $class; ?>">
+            <p>
+                <strong><?= $num++ . ": " . htmlspecialchars($q['text']); ?></strong>
+            </p>
+
+            <p> ✔ Jibu lako:
+                <?php foreach($q['options'] as $opt): ?>
+                    <?php if($opt['id'] == $res['user_answer']): ?>
+                        <span> <?= htmlspecialchars($opt['text']) ?> </span>
+                    <?php endif; ?>
+                <?php endforeach; ?>
+            </p>
+
+            <?php if(!$res['is_correct']): ?>
+                <p style="color: red;"> ❌ Sahihi ni:
+                    <?php foreach($q['options'] as $opt): ?>
+                        <?php if($opt['id'] == $res['correct']): ?>
+                            <span><?= htmlspecialchars($opt['text']); ?></span>
+                        <?php endif; ?>
+                    <?php endforeach; ?>
+                </p>
+            <?php else: ?>
+                <p style="color: green;"> ✓ Sahihi</p>
             <?php endif; ?>
         </div>
-        <form method="post">
-            <div class="questions">
-                <?php $qnum = 1; ?>
-            <?php foreach($data['questions'] as $question): ?>
-                
-                <div class="eachSection">
-                    <p> <?php echo $qnum++  . ": " . htmlspecialchars($question['text']);  ?></p>
 
-                    <?php foreach($question['options'] as $opt): ?>
-                        <input type="radio"
-                        name="answers[<?php echo $question['id']; ?>]"
-                        id="opt_<?php echo $opt['id']; ?>"
-                        value="<?php echo $opt['id']; ?>"
-                        <?php if(isset($user_answers[$question['id']]) && $user_answers[$question['id']] == $opt['id']){ echo "checked";} ?> required>
-                        <label for="opt_<?php echo $opt['id']; ?>"><?php echo $opt['text']; ?></label><br>
-                    <?php endforeach; ?>
+    <?php endforeach; ?>
 
-                    <?php if(isset($results)): ?>
-                        <?php if($results[$question['id']]['is_correct']): ?>
-                            <p style="color: green;"> ✔ Correct answer</p>
-                        <?php else: ?>
-                            <p style="color: red;"> ❌ Wrong answer. The answer was: 
-                                <?php foreach($question['options'] as $opt): ?>
-                                    <?php if($opt['id'] == $results[$question['id']]['correct_answer'])
-                                    {
-                                        echo $opt['text'];
-                                        break;
-                                    }
-                                    ?>
-                                <?php endforeach; ?>
-                            </p>
-                        <?php endif; ?>
-                    <?php endif; ?>
-                    
+                <div class="ms-5">
+                    <?= "Alama: " . $score . "/" . count($results) ?>
                 </div>
-            <?php endforeach; ?>
+    <!-- Reset Button -->
+    <form method="get" class="my-4">
+          <button class="btn btn-primary w-100" type="submit">Jaribu Maswali mengine</button>
+    </form>
 
-            <div class="btnHolder">
-            <button class="btn" type="submit">Submit</button>
+    <?php else: ?>
+        <!-- Onesha maswali -->
+         
+            <form method="POST">
+                <?php $qnum = 1; foreach($_SESSION['questions'] as $question) :?>
+                    <div class="question shadow-lg p-2 rounded">
+                        <p>
+                            <strong> <?= $qnum++ . ": " . htmlspecialchars($question['text'])  ?> </strong>
+                        </p>
+                        <!-- Majibu (Multiple choise) -->
+                         <?php foreach($question['options'] as $opt): ?>
+                            <label>
+                                <input type="radio"
+                                name="answers[<?= $question['id']; ?>]"
+                                value="<?= $opt['id']; ?>" required>
+                                <?= htmlspecialchars($opt['text']); ?>
+                            </label><br>
+                        <?php endforeach; ?> 
+                    </div>
+                <?php endforeach; ?>
+                <!-- Submit button -->
+            <div class="my-4">
+                <button class="btn btn-primary w-100">Wasilisha</button>
             </div>
-        </div>
-        </form>
-    </div>
+
+            </form>
+    <?php endif; ?>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.6/dist/js/bootstrap.bundle.min.js" integrity="sha384-j1CDi7MgGQ12Z7Qab0qlWQ/Qqz24Gc6BM0thvEMVjHnfYGF0rmFCozFSxQBxwHKO" crossorigin="anonymous"></script>
 </body>
 </html>
-
